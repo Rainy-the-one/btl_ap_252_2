@@ -131,10 +131,8 @@ def p_term(inp: str) -> Term:
         else:
             raise ParseError("UnexpectedChar", char_idx, ind)
 
-    # Khởi chạy từ token đầu tiên
     ast, final_t_idx = parse_next(0)
     
-    # Kiểm tra xem có token nào bị thừa ở cuối chuỗi không
     if final_t_idx < len(tokens):
         _, unused_char_idx = tokens[final_t_idx]
         raise ParseError("UnusedInput", unused_char_idx)
