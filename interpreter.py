@@ -141,38 +141,39 @@ def interpret(check_max: bool, term: Term) -> tuple[Term, int]:
                 thunk.steps = steps - steps_before
                 
                 return val
+            
         if isinstance(t, TBinOp):
             if t.op == '$':
-                # Đánh giá nhánh trái để lấy closure
                 func = eval_term(t.left, env)
                 if not isinstance(func, VClosure):
                     raise TypeError_("Left side of B$ must evaluate to a lambda")
                 
-                # Gói nhánh phải thành Thunk (Call-by-name: chưa tính vội)
                 arg_thunk = Thunk(kind="lazy", term=t.right, env=env.copy())
                 
-                # Tạo môi trường mới cho hàm, đưa tham số vào
                 new_env = func.env.copy()
                 new_env[func.var] = arg_thunk
                 
-                # Tăng số bước (beta-reduction)
                 steps += 1
                 
-                # Đánh giá thân hàm với môi trường mới
                 return eval_term(func.body, new_env)
             
             left_val = eval_term(t.left, env)
             right_val = eval_term(t.right, env)
 
+            # Math operators
             if t.op in ['+', '-', '*', '/', '%', '<', '>', '=']:
                 if not (isinstance(left_val, VInt) and isinstance(right_val, VInt)):
                     raise TypeError_(f"Operator B{t.op} requires integers")
                 
                 lv, rv = left_val.value, right_val.value
                 
-                if t.op == '+': return VInt(lv + rv)
-                if t.op == '-': return VInt(lv - rv)
-                if t.op == '*': return VInt(lv * rv)
+                # Calculated operators
+                if t.op == '+': 
+                    return VInt(lv + rv)
+                if t.op == '-': 
+                    return VInt(lv - rv)
+                if t.op == '*': 
+                    return VInt(lv * rv)
                 if t.op == '/':
                     if rv == 0: raise ArithmeticError_("Division by zero")
                     return VInt(int(lv / rv)) # truncate toward 0
@@ -181,15 +182,23 @@ def interpret(check_max: bool, term: Term) -> tuple[Term, int]:
                     res = abs(lv) % abs(rv)
                     if lv < 0: res = -res
                     return VInt(res)
-                if t.op == '<': return VBool(lv < rv)
-                if t.op == '>': return VBool(lv > rv)
-                if t.op == '=': return VBool(lv == rv)
-
+                
+                # Compared operators
+                if t.op == '<': 
+                    return VBool(lv < rv)
+                if t.op == '>': 
+                    return VBool(lv > rv)
+                if t.op == '=': 
+                    return VBool(lv == rv)
+            
+            # Logic operators
             if t.op in ['|', '&']:
                 if not (isinstance(left_val, VBool) and isinstance(right_val, VBool)):
                     raise TypeError_(f"Operator B{t.op} requires booleans")
-                if t.op == '|': return VBool(left_val.value or right_val.value)
-                if t.op == '&': return VBool(left_val.value and right_val.value)
+                if t.op == '|': 
+                    return VBool(left_val.value or right_val.value)
+                if t.op == '&': 
+                    return VBool(left_val.value and right_val.value)
 
             if t.op == '.':
                 if not (isinstance(left_val, VString) and isinstance(right_val, VString)):
@@ -200,9 +209,12 @@ def interpret(check_max: bool, term: Term) -> tuple[Term, int]:
                 if not (isinstance(left_val, VInt) and isinstance(right_val, VString)):
                     raise TypeError_(f"Operator B{t.op} requires int and string")
                 lv, rv = left_val.value, right_val.value
-                if lv < 0: raise ValueError("Index must be non-negative")
-                if t.op == 'T': return VString(rv[:lv])
-                if t.op == 'D': return VString(rv[lv:])
+                if lv < 0: 
+                    raise ValueError("Index must be non-negative")
+                if t.op == 'T': 
+                    return VString(rv[:lv])
+                if t.op == 'D': 
+                    return VString(rv[lv:])
 
             raise UnknownBinOp(t.op)
         
