@@ -161,7 +161,7 @@ def interpret(check_max: bool, term: Term) -> tuple[Term, int]:
             right_val = eval_term(t.right, env)
 
             # Math operators
-            if t.op in ['+', '-', '*', '/', '%', '<', '>', '=']:
+            if t.op in ['+', '-', '*', '/', '%', '<', '>']:
                 if not (isinstance(left_val, VInt) and isinstance(right_val, VInt)):
                     raise TypeError_(f"Operator B{t.op} requires integers")
                 
@@ -188,8 +188,12 @@ def interpret(check_max: bool, term: Term) -> tuple[Term, int]:
                     return VBool(lv < rv)
                 if t.op == '>': 
                     return VBool(lv > rv)
-                if t.op == '=': 
-                    return VBool(lv == rv)
+            if t.op == '=':
+                if type(left_val) != type(right_val):
+                    raise TypeError_("Type mismatch in B=")
+                if not isinstance(left_val, (VInt, VBool, VString)):
+                    raise TypeError_("B= requires comparable types")
+                return VBool(left_val.value == right_val.value)
             
             # Logic operators
             if t.op in ['|', '&']:
@@ -244,15 +248,17 @@ def interpret(check_max: bool, term: Term) -> tuple[Term, int]:
                 if not isinstance(val, VInt): 
                     raise TypeError_("U$ requires int")
                 v = val.value
-                if v < 0: 
-                    raise InterpreterError("U$ requires non-negative int")
+                if v < 0:
+                    raise ArithmeticError_("U$ requires non-negative int")
+                
+                from ifp_ast import CHARS_DECODED
                 if v == 0: 
-                    return VString("!")
+                    return VString(CHARS_DECODED[0])
                 
                 res = []
                 while v > 0:
                     v, rem = divmod(v, 94)
-                    res.append(chr(rem + 33)) # ascii 33 -> 126
+                    res.append(CHARS_DECODED[rem])
                 res.reverse()
                 return VString("".join(res))
                 

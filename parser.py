@@ -32,111 +32,102 @@ class ParseError(Exception):
 
 
 def p_term(inp: str) -> Term:
-    # TODO
-    tokens : list[tuple [str, int]] = []
-    i = 0
-    while i < len(inp):
-        while i < len(inp) and inp[i].isspace():
-            i += 1
+    def parse_next(i: int) -> tuple[Term, int]:
         if i >= len(inp):
-            break
-        start = i
-        while i < len(inp) and not inp[i].isspace():
-            i += 1
-        tokens.append((inp[start:i], start))
-
-    if not tokens:
-        raise ParseError("UnexpectedEOF")
-    
-    def decode_base94(s: str, start_idx: int) -> int:
-        if not s:
-            raise ParseError("UnexpectedChar", start_idx, None)
-        val = 0
-        for j, c in enumerate(s):
-            if not (33 <= ord(c) <= 126):
-                raise ParseError("UnexpectedChar", start_idx + j, c)
-            val = val * 94 + (ord(c) - 33)
-        return val
-    
-    def decode_string(s: str, start_idx: int) -> str:
-        res = []
-        for j, c in enumerate(s):
-            if not (33 <= ord(c) <= 126):
-                raise ParseError("UnexpectedChar", start_idx + j, c)
-            res.append(CHARS_DECODED[ord(c) - 33])
-        return "".join(res)
-
-    def parse_next(t_idx: int) -> tuple[Term, int]:
-        if t_idx >= len(tokens):
-            raise ParseError("UnexpectedEOF")
+            raise ParseError("UnexpectedEOF", i)
         
-        tok_str, char_idx = tokens[t_idx]
+        # Tìm khoảng trắng tiếp theo
+        end = inp.find(" ", i)
+        if end == -1:
+            end = len(inp)
+            next_i = end
+        else:
+            next_i = end + 1
+            
+        tok_str = inp[i:end]
+        if not tok_str:
+            raise ParseError("UnexpectedChar", i, " ")
+            
         ind = tok_str[0]
         body = tok_str[1:]
         
+        def check_body_empty():
+            if body: raise ParseError("UnexpectedChar", i + 1, body[0])
+            
+        def check_body_not_empty():
+            if not body: raise ParseError("UnexpectedEOF", i + 1)
+            
         if ind == 'T':
-            if body:
-                raise ParseError("UnexpectedChar", char_idx + 1, body[0])
-            return TBool(True), t_idx + 1
-            
+            check_body_empty()
+            return TBool(True), next_i
         elif ind == 'F':
-            if body:
-                raise ParseError("UnexpectedChar", char_idx + 1, body[0])
-            return TBool(False), t_idx + 1
-            
+            check_body_empty()
+            return TBool(False), next_i
         elif ind == 'I':
-            val = decode_base94(body, char_idx + 1)
-            return TInt(val), t_idx + 1
-            
+            check_body_not_empty()
+            val = 0
+            for j, c in enumerate(body):
+                if not (33 <= ord(c) <= 126):
+                    raise ParseError("UnexpectedChar", i + 1 + j, c)
+                val = val * 94 + (ord(c) - 33)
+            return TInt(val), next_i
         elif ind == 'S':
-            val = decode_string(body, char_idx + 1)
-            return TString(val), t_idx + 1
-            
+            res = []
+            for j, c in enumerate(body):
+                if not (33 <= ord(c) <= 126):
+                    raise ParseError("UnexpectedChar", i + 1 + j, c)
+                res.append(CHARS_DECODED[ord(c) - 33])
+            return TString("".join(res)), next_i
         elif ind == 'v':
-            val = decode_base94(body, char_idx + 1)
-            return TVar(val), t_idx + 1
-            
+            check_body_not_empty()
+            val = 0
+            for j, c in enumerate(body):
+                if not (33 <= ord(c) <= 126):
+                    raise ParseError("UnexpectedChar", i + 1 + j, c)
+                val = val * 94 + (ord(c) - 33)
+            return TVar(val), next_i
         elif ind == 'U':
+            check_body_not_empty()
             if len(body) != 1:
-                err_idx = char_idx + 1 if not body else char_idx + 2
-                err_ch = None if not body else body[1]
-                raise ParseError("UnexpectedChar", err_idx, err_ch)
+                raise ParseError("UnexpectedChar", i + 2, body[1])
             op = body[0]
-            term, next_t_idx = parse_next(t_idx + 1)
-            return TUnOp(op, term), next_t_idx
-            
+            term, next_next_i = parse_next(next_i)
+            return TUnOp(op, term), next_next_i
         elif ind == 'B':
+            check_body_not_empty()
             if len(body) != 1:
-                err_idx = char_idx + 1 if not body else char_idx + 2
-                err_ch = None if not body else body[1]
-                raise ParseError("UnexpectedChar", err_idx, err_ch)
+                raise ParseError("UnexpectedChar", i + 2, body[1])
             op = body[0]
-            left, next_t_idx = parse_next(t_idx + 1)
-            right, next_t_idx = parse_next(next_t_idx)
-            return TBinOp(left, op, right), next_t_idx
-            
+            left, next_next_i = parse_next(next_i)
+            right, final_next = parse_next(next_next_i)
+            return TBinOp(left, op, right), final_next
         elif ind == '?':
-            if body:
-                raise ParseError("UnexpectedChar", char_idx + 1, body[0])
-            cond, next_t_idx = parse_next(t_idx + 1)
-            true_b, next_t_idx = parse_next(next_t_idx)
-            false_b, next_t_idx = parse_next(next_t_idx)
-            return TIf(cond, true_b, false_b), next_t_idx
-            
+            check_body_empty()
+            cond, next_next_i = parse_next(next_i)
+            true_b, next_next_next_i = parse_next(next_next_i)
+            false_b, final_next = parse_next(next_next_next_i)
+            return TIf(cond, true_b, false_b), final_next
         elif ind == 'L':
-            var_id = decode_base94(body, char_idx + 1)
-            term, next_t_idx = parse_next(t_idx + 1)
-            return TLam(var_id, term), next_t_idx
-            
+            check_body_not_empty()
+            val = 0
+            for j, c in enumerate(body):
+                if not (33 <= ord(c) <= 126):
+                    raise ParseError("UnexpectedChar", i + 1 + j, c)
+                val = val * 94 + (ord(c) - 33)
+            term, next_next_i = parse_next(next_i)
+            return TLam(val, term), next_next_i
         else:
-            raise ParseError("UnexpectedChar", char_idx, ind)
+            raise ParseError("UnexpectedChar", i, ind)
 
-    ast, final_t_idx = parse_next(0)
+    ast, final_i = parse_next(0)
     
-    if final_t_idx < len(tokens):
-        _, unused_char_idx = tokens[final_t_idx]
-        raise ParseError("UnusedInput", unused_char_idx)
-
-
+    # Kiểm tra xem có token/chữ cái nào thừa ở cuối không
+    if final_i < len(inp):
+        end = inp.find(" ", final_i)
+        if end == -1: end = len(inp)
+        tok_str = inp[final_i:end]
+        if not tok_str:
+            raise ParseError("UnexpectedChar", final_i, " ")
+        raise ParseError("UnusedInput", final_i)
 
     return ast
